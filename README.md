@@ -7,8 +7,8 @@ Add user and password to file .env
 
 Run file stock_web.py
 ## The stack
-Jupyter notebook
+*   Jupyter notebook
 
-Python
+*   Python
 
-Dash
+*   Dash
