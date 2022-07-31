@@ -1,0 +1,1 @@
+execfile('src/stock_web.py')
