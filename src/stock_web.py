@@ -15,6 +15,7 @@ from datetime import datetime
 import numpy as np
 from src.settings import LOGIN, PASSWORD, SERVER
 import plotly.graph_objects as go
+from xgboost import XGBRegressor,Booster
 
 print(LOGIN, PASSWORD, SERVER)
 try:
@@ -97,8 +98,40 @@ def getPriceOfChangeGraph(data):
         )
     }
 
+# function xgboose
+def ROC(data,n):
+    N=data["close"].diff(n)
+    M=data["close"].shift(n)
+    roc=pd.Series(N/M,name="roc")
+    data=data.join(roc)
+    return data
+
+def preprocess_roc(data):
+    data_close=data[["close"]].copy()
+    tmp=ROC(data_close,5)
+    data_roc=tmp[["roc"]].copy()
+    data_roc["target"]=data_roc.roc.shift(-1)
+    data_roc.dropna(inplace=True)
+    return data_roc  
+
+def predict_value(data,percent,path=""):
+    #Load model
+    model=XGBRegressor(objective="reg:squarederror",n_estimators=1000)
+    model.load_model(path)
+
+    #get test
+    test = data.values[-1:]
+
+    #Predict value
+    predictions=[]
+    for i in range(len(test)):
+        val=np.array(test[i,0]).reshape(1,-1)
+        pred=model.predict(val)
+        predictions.append(pred[0])
+    return predictions[0]
+
 app.layout = html.Div([
-    dcc.Interval(id='my-interval', interval=60000), #update html in miliseconds
+    dcc.Interval(id='my-interval', interval=120000), #update html in miliseconds (cur 2 minute load again)
     
     html.H1(
         "Currency Exchange Rate Prediction Analysis Dashboard",
@@ -198,21 +231,36 @@ app.layout = html.Div([
     ,Input('price-dropdown', 'value'))
 def multi_output(n_intervals, time, predictType, price):
     prediction_days = 10
+
     #get data
     data = getData(time,price)
 
+    if (predictType == "XGBOOST"):
+        #init
+        percent = 0.2
+
+        #copy data closing
+        data_close=data[["close"]].copy()
+        data_close["target"]=data_close.close.shift(-1)
+        data_close.dropna(inplace=True)
+        prediction1=predict_value(data_close,percent,getPathModel("Closing",predictType, price))
+
+        #
+        data_roc1=preprocess_roc(data)
+        prediction2=predict_value(data_close,percent,getPathModel("Price_of_change",predictType, price))
+
+        return ["Predict closing: " +  str(prediction1), "Predict price of change: " + str(prediction2)]
+
     #closing model
-    scaled_data_closing = scaler.fit_transform(data['close'].values.reshape(-1,1))
+    scaled_data_closing = scaler.fit_transform(data['close'].values[-22:].reshape(-1,1))
     modelClosing = load_model(getPathModel("Closing",predictType, price))
 
     x_train = []
-    y_train = []
 
-    for x in range(prediction_days, len(scaled_data_closing)):
+    for x in range(len(scaled_data_closing)-12, len(scaled_data_closing)):
         x_train.append(scaled_data_closing[x-prediction_days:x,0])
-        y_train.append(scaled_data_closing[x,0])
 
-    x_train, y_train = np.array(x_train), np.array(y_train)
+    x_train = np.array(x_train)
     x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
     real_data = [x_train[len(x_train + 1) - prediction_days:len(x_train),0]]
@@ -224,17 +272,15 @@ def multi_output(n_intervals, time, predictType, price):
     print(prediction)
 
     #Price of change
-    scaled_data_price_of_change = scaler.fit_transform((data['close']-data['open']).values.reshape(-1,1))
+    scaled_data_price_of_change = scaler.fit_transform((data['close']-data['open']).values[-22:].reshape(-1,1))
     modelPriceOfChange = load_model(getPathModel("Price_of_change",predictType, price))
 
     x_train = []
-    y_train = []
 
-    for x in range(prediction_days, len(scaled_data_price_of_change)):
+    for x in range(len(scaled_data_price_of_change)- 12, len(scaled_data_price_of_change)):
         x_train.append(scaled_data_price_of_change[x-prediction_days:x,0])
-        y_train.append(scaled_data_price_of_change[x,0])
 
-    x_train, y_train = np.array(x_train), np.array(y_train)
+    x_train= np.array(x_train)
     x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
     real_data = [x_train[len(x_train + 1) - prediction_days:len(x_train),0]]
