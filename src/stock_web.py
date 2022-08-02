@@ -131,7 +131,7 @@ def predict_value(data,percent,path=""):
     return predictions[0]
 
 app.layout = html.Div([
-    dcc.Interval(id='my-interval', interval=120000), #update html in miliseconds (cur 2 minute load again)
+    dcc.Interval(id='my-interval', interval=60000), #update html in miliseconds (cur 1 minute load again)
     
     html.H1(
         "Currency Exchange Rate Prediction Analysis Dashboard",
