@@ -41,27 +41,30 @@ scaler = MinMaxScaler(feature_range=(0,1))
 
 def switchTime(time):
     if time == "1 Week":
-        return mt.TIMEFRAME_W1
+        return mt.TIMEFRAME_W1,datetime(2022, 1, 1)
     if time == "1 Hour":
-        return mt.TIMEFRAME_H1
-    return mt.TIMEFRAME_D1
+        return mt.TIMEFRAME_H1,datetime(2022, 1, 1)
+    if time == "1 Minute":
+        return mt.TIMEFRAME_M1,datetime(2022, 7, 20)
+    return mt.TIMEFRAME_D1,datetime(2022, 1, 1)
 
 def getPathModel(predictType, modelType, price):  #modelType: LSTM, RNN; predictType: Closing
     return "./models/" + predictType + "/" + modelType + "/" + price + ".h5"
 
 def getData(time, price):
-    _time = switchTime(time)
-    data = pd.DataFrame(mt.copy_rates_range(price, _time, datetime(2022, 1, 1), datetime.now()))
+    _time,_date = switchTime(time)
+    data = pd.DataFrame(mt.copy_rates_range(price, _time, _date, datetime.now()))
     return data
 
 def getGraphCandle(data):
-    fig = go.Figure(go.Candlestick(
+    fig = go.Figure([go.Candlestick(
         x=data['time'],
         open=data['open'],
         high=data['high'],
         low=data['low'],
         close=data['close']
-    ))
+    ),
+    ])
     return fig
 
 def getActualGraph(data):
@@ -74,14 +77,28 @@ def getActualGraph(data):
             )
         ],
         "layout": go.Layout(
-            title='Line graph',
             xaxis={'title': 'Timestamp'},
             yaxis={'title': 'Closing Rate'}
         )
     }
 
+def getPriceOfChangeGraph(data):
+    return {
+        "data": [
+            go.Scatter(
+                x=data['time'],
+                y=data["close"] - data["open"],
+                mode="lines",
+            )
+        ],
+        "layout": go.Layout(
+            xaxis={'title': 'Timestamp'},
+            yaxis={'title': 'Rate of change'}
+        )
+    }
+
 app.layout = html.Div([
-    dcc.Interval(id='my-interval', interval=240000),
+    dcc.Interval(id='my-interval', interval=60000), #update html in miliseconds
     
     html.H1(
         "Currency Exchange Rate Prediction Analysis Dashboard",
@@ -89,28 +106,31 @@ app.layout = html.Div([
     ),
 
     html.Div([
+        dcc.Dropdown(['EURUSD', 'GBPUSD', 'USDCHF'], 'EURUSD', id='price-dropdown'),
+        dcc.Dropdown(['1 Day', '1 Week', '1 Hour', '1 Minute'], '1 Day', id='time-dropdown'),
+        dcc.Dropdown(['LSTM', 'RNN', 'XGBOOST'], 'LSTM', id='predict-type-dropdown'),
+    ]),
+
+    dcc.Loading(
+        id="ls-loading-1",
+        style={"height": "100px"},
+        children=[
+            html.H2(
+                id="predictClosing",
+                style={"textAlign": "center"}
+            ),
+            html.H2(
+                id="predictPriceOfChange",
+                style={"textAlign": "center"}
+            )
+        ],
+        type="circle",
+    ),
+
+    html.Div([
                 html.H2(
                     "Line graph",
                     style={"textAlign": "center"}
-                ),
-                html.Div([
-                    dcc.Dropdown(['EURUSD', 'GBPUSD', 'USDCHF'], 'EURUSD', id='price-dropdown'),
-                    dcc.Dropdown(['1 Day', '1 Week', '1 Hour'], '1 Day', id='time-dropdown'),
-                    dcc.Dropdown(['LSTM', 'RNN', 'XGBOOST'], 'LSTM', id='predict-type-dropdown'),
-                ]),
-                dcc.Loading(
-                    id="ls-loading-2",
-                    children=[
-                        html.H2(
-                            id="predictClosing",
-                            style={"textAlign": "center"}
-                        ),
-                        html.H2(
-                            id="predictPriceOfChange",
-                            style={"textAlign": "center"}
-                        )
-                    ],
-                    type="circle",
                 ),
                 dcc.Graph(
                     id="Actual Data",
@@ -123,7 +143,6 @@ app.layout = html.Div([
                             )
                         ],
                         "layout": go.Layout(
-                            title='Line graph',
                             xaxis={'title': 'Timestamp'},
                             yaxis={'title': 'Closing Rate'}
                         )
@@ -144,18 +163,41 @@ app.layout = html.Div([
                     close=df_stock['close']
                 ))),
             ]),
+    
+    html.Div([
+                html.H2(
+                    "Price of change graph",
+                    style={"textAlign": "center"}
+                ),
+                dcc.Graph(
+                    id="Price of change",
+                    figure={
+                        "data": [
+                            go.Scatter(
+                                x=df_stock['time'],
+                                y=df_stock["close"] - df_stock["open"],
+                                mode="lines",
+                            )
+                        ],
+                        "layout": go.Layout(
+                            xaxis={'title': 'Timestamp'},
+                            yaxis={'title': 'Closing Rate'}
+                        )
+                    }
+                ),
+            ]),
 ])
 
 #predict data
 @app.callback(
-    Output("predictClosing","children")
-    ,Output("predictPriceOfChange","children"),
+    Output("predictClosing","children"),
+    Output("predictPriceOfChange","children"),
     Input('my-interval', 'n_intervals') #get data with 1 interval
     ,Input('time-dropdown', 'value')
     ,Input('predict-type-dropdown', 'value')
     ,Input('price-dropdown', 'value'))
 def multi_output(n_intervals, time, predictType, price):
-    prediction_days = 60
+    prediction_days = 10
     #get data
     data = getData(time,price)
 
@@ -182,7 +224,7 @@ def multi_output(n_intervals, time, predictType, price):
     print(prediction)
 
     #Price of change
-    scaled_data_price_of_change = scaler.fit_transform((data['high']-data['low']).values.reshape(-1,1))
+    scaled_data_price_of_change = scaler.fit_transform((data['close']-data['open']).values.reshape(-1,1))
     modelPriceOfChange = load_model(getPathModel("Price_of_change",predictType, price))
 
     x_train = []
@@ -203,13 +245,13 @@ def multi_output(n_intervals, time, predictType, price):
     prediction2 = scaler.inverse_transform(prediction2)
     print(prediction2)
 
-
     return ["Predict closing: " +  str(prediction[0][0]), "Predict price of change: " + str(prediction2[0][0])]
 
 #update graph
 @app.callback(
     Output("Candle graph", "figure")
-    ,Output("Actual Data", "figure"),
+    ,Output("Actual Data", "figure")
+    ,Output("Price of change", "figure"),
     Input('my-interval', 'n_intervals') #get data with 1 interval
     ,Input('time-dropdown', 'value')
     ,Input('price-dropdown', 'value'))
@@ -217,7 +259,7 @@ def multi_output(n_intervals, time, price):
     #get data
     data = getData(time,price)
 
-    return [getGraphCandle(data), getActualGraph(data)]
+    return [getGraphCandle(data), getActualGraph(data), getPriceOfChangeGraph(data)]
 
 if __name__ == '__main__':
     app.run(debug=True)
