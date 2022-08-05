@@ -66,6 +66,7 @@ def getGraphCandle(data):
         close=data['close']
     ),
     ])
+    fig.update_layout(xaxis_rangeslider_visible=False)
     return fig
 
 def getActualGraph(data):
