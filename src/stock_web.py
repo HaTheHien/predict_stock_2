@@ -14,6 +14,7 @@ from src.settings import LOGIN, PASSWORD, SERVER
 import plotly.graph_objects as go
 from xgboost import XGBRegressor, Booster
 
+
 print(LOGIN, PASSWORD, SERVER)
 try:
     import MetaTrader5 as mt
@@ -71,7 +72,7 @@ def get_graph_candle(data):
         low=data['low'],
         close=data['close']
     )])
-    fig.update_layout(xaxis_rangeslider_visible=False)
+    fig.update_layout(xaxis_rangeslider_visible=False,yaxis_title='Candle',xaxis_title='Date time',)
     return fig
 
 
@@ -85,7 +86,7 @@ def get_actual_graph(data):
             )
         ],
         "layout": go.Layout(
-            xaxis={'title': 'Timestamp'},
+            xaxis={'title': 'Date time'},
             yaxis={'title': 'Closing Rate'}
         )
     }
@@ -101,7 +102,7 @@ def get_price_of_change_graph(data):
             )
         ],
         "layout": go.Layout(
-            xaxis={'title': 'Timestamp'},
+            xaxis={'title': 'Date time'},
             yaxis={'title': 'Rate of change'}
         )
     }
@@ -154,17 +155,24 @@ app.layout = html.Div([
         dcc.Dropdown(
             options=['EURUSD', 'GBPUSD', 'USDCHF'],
             value='EURUSD',
-            id='price-dropdown'
+            id='price-dropdown',
+            clearable=False
         ),
-        dcc.Dropdown(['1 Day', '1 Week', '1 Hour', '1 Minute'], '1 Day', id='time-dropdown'),
+        dcc.Dropdown(
+            ['1 Day', '1 Week', '1 Hour', '1 Minute'], 
+            '1 Day', 
+            id='time-dropdown',
+            clearable=False
+        ),
         dcc.Dropdown(
             options=[
                 {"label": "LSTM", "value": "lstm"},
                 {"label": "RNN", "value": "rnn"},
                 {"label": "XGBOOST", "value": "xgboost"}
             ],
+            clearable=False,
             value='lstm',
-            id='predict-type-dropdown'
+            id='predict-type-dropdown',
         ),
     ]),
 
