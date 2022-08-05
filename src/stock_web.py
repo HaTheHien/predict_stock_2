@@ -55,9 +55,11 @@ def get_data(time, price):
     try:
         _time, _date = switch_time(time)
         data = pd.DataFrame(mt.copy_rates_range(price, _time, _date, datetime.now()))
+        data["time"] = data['time'].apply(lambda d: datetime.fromtimestamp(d))
         return data
     except NameError:
         data = pd.read_csv("./data/EURUSD_D1.csv")
+        data["time"] = data['time'].apply(lambda d: datetime.fromtimestamp(d))
         return data
 
 
