@@ -52,9 +52,13 @@ def get_path_model(predict_type, model_type, price):
 
 
 def get_data(time, price):
-    _time, _date = switch_time(time)
-    data = pd.DataFrame(mt.copy_rates_range(price, _time, _date, datetime.now()))
-    return data
+    try:
+        _time, _date = switch_time(time)
+        data = pd.DataFrame(mt.copy_rates_range(price, _time, _date, datetime.now()))
+        return data
+    except NameError:
+        data = pd.read_csv("./data/EURUSD_D1.csv")
+        return data
 
 
 def get_graph_candle(data):
@@ -145,9 +149,21 @@ app.layout = html.Div([
     ),
 
     html.Div([
-        dcc.Dropdown(['EURUSD', 'GBPUSD', 'USDCHF'], 'EURUSD', id='price-dropdown'),
+        dcc.Dropdown(
+            options=['EURUSD', 'GBPUSD', 'USDCHF'],
+            value='EURUSD',
+            id='price-dropdown'
+        ),
         dcc.Dropdown(['1 Day', '1 Week', '1 Hour', '1 Minute'], '1 Day', id='time-dropdown'),
-        dcc.Dropdown(['LSTM', 'RNN', 'XGBOOST'], 'LSTM', id='predict-type-dropdown'),
+        dcc.Dropdown(
+            options=[
+                {"label": "LSTM", "value": "lstm"},
+                {"label": "RNN", "value": "rnn"},
+                {"label": "XGBOOST", "value": "xgboost"}
+            ],
+            value='lstm',
+            id='predict-type-dropdown'
+        ),
     ]),
 
     dcc.Loading(
@@ -181,6 +197,7 @@ app.layout = html.Div([
                         mode="lines",
                     )
                 ],
+                # "hover_data": {"time": "|%B %d, %Y"},
                 "layout": go.Layout(
                     xaxis={'title': 'Timestamp'},
                     yaxis={'title': 'Closing Rate'}
@@ -243,7 +260,7 @@ def multi_output(n_intervals, time, predict_type, price):
     # get data
     data = get_data(time, price)
 
-    if predict_type == "XGBOOST":
+    if predict_type == "xgboost":
         # init
         percent = 0.2
 
@@ -251,17 +268,17 @@ def multi_output(n_intervals, time, predict_type, price):
         data_close = data[["close"]].copy()
         data_close["target"] = data_close.close.shift(-1)
         data_close.dropna(inplace=True)
-        prediction1 = predict_value(data_close, percent, get_path_model("Closing", predict_type, price))
+        prediction1 = predict_value(data_close, percent, get_path_model("closing", predict_type, price))
 
         #
         data_roc1 = preprocess_roc(data)
-        prediction2 = predict_value(data_close, percent, get_path_model("Price_of_change", predict_type, price))
+        prediction2 = predict_value(data_close, percent, get_path_model("price_of_change", predict_type, price))
 
         return ["Predict closing: " + str(prediction1), "Predict price of change: " + str(prediction2)]
 
     # closing model
     scaled_data_closing = scaler.fit_transform(data['close'].values[-22:].reshape(-1, 1))
-    model_closing = load_model(get_path_model("Closing", predict_type, price))
+    model_closing = load_model(get_path_model("closing", predict_type, price))
 
     x_train = []
 
@@ -281,7 +298,7 @@ def multi_output(n_intervals, time, predict_type, price):
 
     # Price of change
     scaled_data_price_of_change = scaler.fit_transform((data['close'] - data['open']).values[-22:].reshape(-1, 1))
-    model_price_of_change = load_model(get_path_model("Price_of_change", predict_type, price))
+    model_price_of_change = load_model(get_path_model("price_of_change", predict_type, price))
 
     x_train = []
 
@@ -299,7 +316,7 @@ def multi_output(n_intervals, time, predict_type, price):
     prediction2 = scaler.inverse_transform(prediction2)
     print(prediction2)
 
-    return ["Predict closing: " + str(prediction[0][0]), "Predict price of change: " + str(prediction2[0][0])]
+    return [f"Predict closing: {str(prediction[0][0])}", f"Predict price of change: {str(prediction2[0][0])}"]
 
 
 # update graph
