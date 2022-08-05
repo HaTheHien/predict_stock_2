@@ -65,6 +65,7 @@ def get_graph_candle(data):
         low=data['low'],
         close=data['close']
     )])
+    fig.update_layout(xaxis_rangeslider_visible=False)
     return fig
 
 
