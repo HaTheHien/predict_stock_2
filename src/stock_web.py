@@ -10,7 +10,7 @@ from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 from datetime import datetime
 import numpy as np
-from src.settings import LOGIN, PASSWORD, SERVER
+from settings import LOGIN, PASSWORD, SERVER
 import plotly.graph_objects as go
 from xgboost import XGBRegressor, Booster
 
@@ -49,7 +49,7 @@ def switch_time(time):
 
 # modelType: LSTM, RNN; predictType: Closing
 def get_path_model(predict_type, model_type, price):
-    return f"./models/{predict_type}/{model_type}/{price}.h5"
+    return f"../models/{predict_type}/{model_type}/{price}.h5"
 
 
 def get_data(time, price):
@@ -148,46 +148,61 @@ app.layout = html.Div([
 
     html.H1(
         "Currency Exchange Rate Prediction Analysis Dashboard",
-        style={"textAlign": "center"}
+        style={"textAlign": "center","marginBottom":"3%"}
     ),
 
     html.Div([
-        dcc.Dropdown(
-            options=['EURUSD', 'GBPUSD', 'USDCHF'],
-            value='EURUSD',
-            id='price-dropdown',
-            clearable=False
-        ),
-        dcc.Dropdown(
-            ['1 Day', '1 Week', '1 Hour', '1 Minute'], 
-            '1 Day', 
-            id='time-dropdown',
-            clearable=False
-        ),
-        dcc.Dropdown(
-            options=[
-                {"label": "LSTM", "value": "lstm"},
-                {"label": "RNN", "value": "rnn"},
-                {"label": "XGBOOST", "value": "xgboost"}
-            ],
-            clearable=False,
-            value='lstm',
-            id='predict-type-dropdown',
-        ),
+        html.Div([
+            html.Label("Select a stock", style={"marginBottom":"2%"}),
+            dcc.Dropdown(
+                options=['EURUSD', 'GBPUSD', 'USDCHF'],
+                value='EURUSD',
+                id='price-dropdown',
+                clearable=False
+            ),   
+        ],style={"width":"30%","display":"inline-block"}),
+        html.Div([
+            html.Label("Select time period",style={"margin-bottom":"2%"}),
+            dcc.Dropdown(
+                ['1 Day', '1 Week', '1 Hour', '1 Minute'], 
+                '1 Day', 
+                id='time-dropdown',
+                clearable=False
+            )
+        ],style={"width":"30%","display":"inline-block","margin":"0 3%"}),
+        html.Div([
+            html.Label("Select algorithm",style={"margin-bottom":"2%"}),
+            dcc.Dropdown(
+                options=[
+                    {"label": "LSTM", "value": "lstm"},
+                    {"label": "RNN", "value": "rnn"},
+                    {"label": "XGBOOST", "value": "xgboost"}
+                ],
+                clearable=False,
+                value='lstm',
+                id='predict-type-dropdown',
+            ),
+        ],style={"width":"30%","display":"inline-block"})
+        
     ]),
 
     dcc.Loading(
         id="ls-loading-1",
         style={"height": "100px"},
         children=[
-            html.H2(
-                id="predictClosing",
-                style={"textAlign": "center"}
-            ),
-            html.H2(
-                id="predictPriceOfChange",
-                style={"textAlign": "center"}
-            )
+
+            html.H3("Prediction Information",style={"marginTop":"50px"}),
+            html.Div(id="predictResult")
+            
+            
+            # html.P(
+            #     id="predictClosing",
+            #     style={"textAlign": "center"}
+            # ),
+            # html.P(
+            #     id="predictPriceOfChange",
+            #     style={"textAlign": "center"}
+            # )
         ],
         type="circle",
     ),
@@ -252,13 +267,14 @@ app.layout = html.Div([
             }
         ),
     ]),
-])
+],style={"padding":"5%"})
 
 
 # predict data
 @app.callback(
-    Output("predictClosing", "children"),
-    Output("predictPriceOfChange", "children"),
+    Output("predictResult","children"),
+    #Output("predictClosing", "children"),
+    #Output("predictPriceOfChange", "children"),
     Input('my-interval', 'n_intervals'),  # get data with 1 interval
     Input('time-dropdown', 'value'),
     Input('predict-type-dropdown', 'value'),
@@ -284,7 +300,17 @@ def multi_output(n_intervals, time, predict_type, price):
         data_roc1 = preprocess_roc(data)
         prediction2 = predict_value(data_close, percent, get_path_model("price_of_change", predict_type, price))
 
-        return ["Predict closing: " + str(prediction1), "Predict price of change: " + str(prediction2)]
+
+
+        return dash.dash_table.DataTable(
+            columns=[{"id":"Criteria", "name":"Criteria"},{"id":"Predict","name":"Predict"}],
+            data=[{"Criteria":"Closing","Predict":prediction1},{"Criteria":"Price of Change","Predict":prediction2}],
+            style_header={'textAlign': 'center',"font_size":"20px"},
+            style_cell={'textAlign': 'center',"font_size":"14px"},
+            style_table={"marginBottom":"50px"},      
+        ),
+        #return 
+        #return ["Predict closing: " + str(prediction1), "Predict price of change: " + str(prediction2)]
 
     # closing model
     scaled_data_closing = scaler.fit_transform(data['close'].values[-22:].reshape(-1, 1))
@@ -326,7 +352,17 @@ def multi_output(n_intervals, time, predict_type, price):
     prediction2 = scaler.inverse_transform(prediction2)
     print(prediction2)
 
-    return [f"Predict closing: {str(prediction[0][0])}", f"Predict price of change: {str(prediction2[0][0])}"]
+    return dash.dash_table.DataTable(
+        columns=[{"id":"Criteria", "name":"Criteria"},{"id":"Predict","name":"Predict"}],
+        data=[{"Criteria":"Closing","Predict":prediction[0][0]},{"Criteria":"Price of Change","Predict":prediction2[0][0]}],
+        style_header={'textAlign': 'center',"font_size":"20px"},
+        style_cell={'textAlign': 'center',"font_size":"14px"},
+        style_table={"marginBottom":"50px"},
+    ),
+    
+    
+    #return 
+    #return [f"Predict closing: {str(prediction[0][0])}", f"Predict price of change: {str(prediction2[0][0])}"]
 
 
 # update graph
