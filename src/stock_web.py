@@ -1,19 +1,26 @@
 # coding: utf-8
 # stock_web.py
 
+from datetime import datetime
+
 import dash
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output
+import numpy as np
 import pandas as pd
+from dash.dependencies import Input, Output
 from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
-from datetime import datetime
-import numpy as np
-from settings import LOGIN, PASSWORD, SERVER
-import plotly.graph_objects as go
-from xgboost import XGBRegressor, Booster
+from xgboost import XGBRegressor
 
+try:
+    from components.table import get_prediction_table
+    from components.dropdown import *
+    from settings import *
+    from components.stock_graph import *
+except ImportError:
+    from src.components.table import get_prediction_table
+    from src.components.dropdown import *
+    from src.settings import *
+    from src.components.stock_graph import *
 
 print(LOGIN, PASSWORD, SERVER)
 try:
@@ -30,10 +37,9 @@ try:
     print(account_info)
     df_stock = pd.DataFrame(mt.copy_rates_range("EURUSD", mt.TIMEFRAME_D1, datetime(2022, 1, 1), datetime.now()))
 except ImportError:
-    df_stock = pd.read_csv("./data/EURUSD_D1.csv")
+    df_stock = pd.read_csv("../data/EURUSD_D1.csv")
 
 app = dash.Dash()
-server = app.server
 scaler = MinMaxScaler(feature_range=(0, 1))
 
 
@@ -59,53 +65,9 @@ def get_data(time, price):
         data["time"] = data['time'].apply(lambda d: datetime.fromtimestamp(d))
         return data
     except NameError:
-        data = pd.read_csv("./data/EURUSD_D1.csv")
+        data = pd.read_csv("../data/EURUSD_D1.csv")
         data["time"] = data['time'].apply(lambda d: datetime.fromtimestamp(d))
         return data
-
-
-def get_graph_candle(data):
-    fig = go.Figure([go.Candlestick(
-        x=data['time'],
-        open=data['open'],
-        high=data['high'],
-        low=data['low'],
-        close=data['close']
-    )])
-    fig.update_layout(xaxis_rangeslider_visible=False,yaxis_title='Candle',xaxis_title='Date time',)
-    return fig
-
-
-def get_actual_graph(data):
-    return {
-        "data": [
-            go.Scatter(
-                x=data['time'],
-                y=data["close"],
-                mode="lines",
-            )
-        ],
-        "layout": go.Layout(
-            xaxis={'title': 'Date time'},
-            yaxis={'title': 'Closing Rate'}
-        )
-    }
-
-
-def get_price_of_change_graph(data):
-    return {
-        "data": [
-            go.Scatter(
-                x=data['time'],
-                y=data["close"] - data["open"],
-                mode="lines",
-            )
-        ],
-        "layout": go.Layout(
-            xaxis={'title': 'Date time'},
-            yaxis={'title': 'Rate of change'}
-        )
-    }
 
 
 # function xgboost
@@ -147,62 +109,23 @@ app.layout = html.Div([
     dcc.Interval(id='my-interval', interval=60000),  # update html in milliseconds (cur 1 minute load again)
 
     html.H1(
-        "Currency Exchange Rate Prediction Analysis Dashboard",
-        style={"textAlign": "center","marginBottom":"3%"}
+        "💱 Currency Exchange Rate Prediction Analysis Dashboard",
+        style={"textAlign": "center", "fontFamily": "monospace"}
     ),
 
+    html.Hr(style={"margin-bottom": "16px"}),
+
     html.Div([
-        html.Div([
-            html.Label("Select a stock", style={"marginBottom":"2%"}),
-            dcc.Dropdown(
-                options=['EURUSD', 'GBPUSD', 'USDCHF'],
-                value='EURUSD',
-                id='price-dropdown',
-                clearable=False
-            ),   
-        ],style={"width":"30%","display":"inline-block"}),
-        html.Div([
-            html.Label("Select time period",style={"margin-bottom":"2%"}),
-            dcc.Dropdown(
-                ['1 Day', '1 Week', '1 Hour', '1 Minute'], 
-                '1 Day', 
-                id='time-dropdown',
-                clearable=False
-            )
-        ],style={"width":"30%","display":"inline-block","margin":"0 3%"}),
-        html.Div([
-            html.Label("Select algorithm",style={"margin-bottom":"2%"}),
-            dcc.Dropdown(
-                options=[
-                    {"label": "LSTM", "value": "lstm"},
-                    {"label": "RNN", "value": "rnn"},
-                    {"label": "XGBOOST", "value": "xgboost"}
-                ],
-                clearable=False,
-                value='lstm',
-                id='predict-type-dropdown',
-            ),
-        ],style={"width":"30%","display":"inline-block"})
-        
-    ]),
+        get_stock_dropdown(),
+        get_time_dropdown(),
+        get_algorithm_dropdown(),
+    ], style={"display": "flex", "column-gap": "8px", "flexDirection": "row", "marginTop": "8px"}),
 
     dcc.Loading(
         id="ls-loading-1",
-        style={"height": "100px"},
         children=[
-
-            html.H3("Prediction Information",style={"marginTop":"50px"}),
-            html.Div(id="predictResult")
-            
-            
-            # html.P(
-            #     id="predictClosing",
-            #     style={"textAlign": "center"}
-            # ),
-            # html.P(
-            #     id="predictPriceOfChange",
-            #     style={"textAlign": "center"}
-            # )
+            html.H2("📜 Prediction Results", style={"marginTop": "20px", "textAlign": "center"}),
+            html.Div(id="prediction-results")
         ],
         type="circle",
     ),
@@ -212,23 +135,7 @@ app.layout = html.Div([
             "Line graph",
             style={"textAlign": "center"}
         ),
-        dcc.Graph(
-            id="Actual Data",
-            figure={
-                "data": [
-                    go.Scatter(
-                        x=df_stock['time'],
-                        y=df_stock["close"],
-                        mode="lines",
-                    )
-                ],
-                # "hover_data": {"time": "|%B %d, %Y"},
-                "layout": go.Layout(
-                    xaxis={'title': 'Timestamp'},
-                    yaxis={'title': 'Closing Rate'}
-                )
-            }
-        ),
+        *get_actual_graph(df_stock)
     ]),
 
     html.Div([
@@ -236,13 +143,7 @@ app.layout = html.Div([
             "Candle graph",
             style={"textAlign": "center"}
         ),
-        dcc.Graph(id="Candle graph", figure=go.Figure(go.Candlestick(
-            x=df_stock['time'],
-            open=df_stock['open'],
-            high=df_stock['high'],
-            low=df_stock['low'],
-            close=df_stock['close']
-        ))),
+        get_candle_graph(df_stock),
     ]),
 
     html.Div([
@@ -250,37 +151,20 @@ app.layout = html.Div([
             "Price of change graph",
             style={"textAlign": "center"}
         ),
-        dcc.Graph(
-            id="Price of change",
-            figure={
-                "data": [
-                    go.Scatter(
-                        x=df_stock['time'],
-                        y=df_stock["close"] - df_stock["open"],
-                        mode="lines",
-                    )
-                ],
-                "layout": go.Layout(
-                    xaxis={'title': 'Timestamp'},
-                    yaxis={'title': 'Closing Rate'}
-                )
-            }
-        ),
+        get_price_of_change_graph(df_stock),
     ]),
-],style={"padding":"5%"})
+], style={"padding": "24px 16px"})
 
 
 # predict data
 @app.callback(
-    Output("predictResult","children"),
-    #Output("predictClosing", "children"),
-    #Output("predictPriceOfChange", "children"),
+    Output("prediction-results", "children"),
     Input('my-interval', 'n_intervals'),  # get data with 1 interval
     Input('time-dropdown', 'value'),
     Input('predict-type-dropdown', 'value'),
     Input('price-dropdown', 'value')
 )
-def multi_output(n_intervals, time, predict_type, price):
+def update_prediction_table(_, time, predict_type, price):
     prediction_days = 10
 
     # get data
@@ -300,17 +184,7 @@ def multi_output(n_intervals, time, predict_type, price):
         data_roc1 = preprocess_roc(data)
         prediction2 = predict_value(data_close, percent, get_path_model("price_of_change", predict_type, price))
 
-
-
-        return dash.dash_table.DataTable(
-            columns=[{"id":"Criteria", "name":"Criteria"},{"id":"Predict","name":"Predict"}],
-            data=[{"Criteria":"Closing","Predict":prediction1},{"Criteria":"Price of Change","Predict":prediction2}],
-            style_header={'textAlign': 'center',"font_size":"20px"},
-            style_cell={'textAlign': 'center',"font_size":"14px"},
-            style_table={"marginBottom":"50px"},      
-        ),
-        #return 
-        #return ["Predict closing: " + str(prediction1), "Predict price of change: " + str(prediction2)]
+        return get_prediction_table(closing_price=prediction1, price_of_change=prediction2)
 
     # closing model
     scaled_data_closing = scaler.fit_transform(data['close'].values[-22:].reshape(-1, 1))
@@ -352,33 +226,27 @@ def multi_output(n_intervals, time, predict_type, price):
     prediction2 = scaler.inverse_transform(prediction2)
     print(prediction2)
 
-    return dash.dash_table.DataTable(
-        columns=[{"id":"Criteria", "name":"Criteria"},{"id":"Predict","name":"Predict"}],
-        data=[{"Criteria":"Closing","Predict":prediction[0][0]},{"Criteria":"Price of Change","Predict":prediction2[0][0]}],
-        style_header={'textAlign': 'center',"font_size":"20px"},
-        style_cell={'textAlign': 'center',"font_size":"14px"},
-        style_table={"marginBottom":"50px"},
-    ),
-    
-    
-    #return 
-    #return [f"Predict closing: {str(prediction[0][0])}", f"Predict price of change: {str(prediction2[0][0])}"]
+    return get_prediction_table(closing_price=prediction[0][0], price_of_change=prediction2[0][0])
 
 
 # update graph
 @app.callback(
-    Output("Candle graph", "figure"),
-    Output("Actual Data", "figure"),
-    Output("Price of change", "figure"),
+    Output("candle-graph", "figure"),
+    Output("actual-graph", "figure"),
+    Output("price-of-change", "figure"),
     Input('my-interval', 'n_intervals'),  # get data with 1 interval
     Input('time-dropdown', 'value'),
     Input('price-dropdown', 'value')
 )
-def multi_output(n_intervals, time, price):
+def update_graphs(_, time, price):
     # get data
     data = get_data(time, price)
 
-    return [get_graph_candle(data), get_actual_graph(data), get_price_of_change_graph(data)]
+    return [
+        get_candle_graph_figure(data),
+        get_actual_graph_figure(data),
+        get_price_of_change_graph_figure(data)
+    ]
 
 
 if __name__ == '__main__':
