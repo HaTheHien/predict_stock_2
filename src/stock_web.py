@@ -11,6 +11,8 @@ from keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 from xgboost import XGBRegressor
 
+from components.add_column import moving_average, relative_strength_index
+
 try:
     from components.table import get_prediction_table
     from components.dropdown import *
@@ -38,6 +40,11 @@ try:
     df_stock = pd.DataFrame(mt.copy_rates_range("EURUSD", mt.TIMEFRAME_D1, datetime(2022, 1, 1), datetime.now()))
 except ImportError:
     df_stock = pd.read_csv("../data/EURUSD_D1.csv")
+
+
+
+df_stock=relative_strength_index(df_stock)
+df_stock=moving_average(df_stock)
 
 app = dash.Dash()
 scaler = MinMaxScaler(feature_range=(0, 1))
@@ -153,6 +160,24 @@ app.layout = html.Div([
         ),
         get_price_of_change_graph(df_stock),
     ]),
+
+    html.Div([
+        html.H2(
+            "RSI graph",
+            style={"textAlign": "center"}
+        ),
+        get_relative_strength_index_graph(df_stock)
+    ]),
+
+
+    html.Div([
+        html.H2(
+            "Moving Average graph",
+            style={"textAlign": "center"}
+        ),
+        get_moving_average_graph(df_stock)
+    ]),
+
 ], style={"padding": "24px 16px"})
 
 
@@ -184,7 +209,23 @@ def update_prediction_table(_, time, predict_type, price):
         data_roc1 = preprocess_roc(data)
         prediction2 = predict_value(data_close, percent, get_path_model("price_of_change", predict_type, price))
 
-        return get_prediction_table(closing_price=prediction1, price_of_change=prediction2)
+        #rsi
+        
+        data_tmp=relative_strength_index(data)
+        data_rsi=data_tmp[["rsi"]].copy()
+        data_rsi["target"]=data_rsi.rsi.shift(-1)
+        data_rsi.dropna(inplace=True)
+        prediction3=predict_value(data_rsi,percent,get_path_model("rsi",predict_type,price))
+
+        #moving_average
+
+        data_tmp=moving_average(data)
+        data_ma=data_tmp[["ma"]].copy()
+        data_ma["target"]=data_ma.ma.shift(-1)
+        data_ma.dropna(inplace=True)
+        prediction4=predict_value(data_ma,percent,get_path_model("moving_average",predict_type,price))
+
+        return get_prediction_table(closing_price=prediction1, price_of_change=prediction2,rsi=prediction3,moving_average=prediction4)
 
     # closing model
     scaled_data_closing = scaler.fit_transform(data['close'].values[-22:].reshape(-1, 1))
@@ -226,14 +267,60 @@ def update_prediction_table(_, time, predict_type, price):
     prediction2 = scaler.inverse_transform(prediction2)
     print(prediction2)
 
-    return get_prediction_table(closing_price=prediction[0][0], price_of_change=prediction2[0][0])
 
+    # RSI
+
+    data_rsi=relative_strength_index(data)
+    scaled_data_rsi = scaler.fit_transform((data_rsi['rsi']).values[-22:].reshape(-1, 1))
+    model_rsi = load_model(get_path_model("rsi", predict_type, price))
+
+    x_train = []
+
+    for x in range(len(scaled_data_rsi) - 12, len(scaled_data_rsi)):
+        x_train.append(scaled_data_rsi[x - prediction_days:x, 0])
+
+    x_train = np.array(x_train)
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+    real_data = [x_train[len(x_train + 1) - prediction_days:len(x_train), 0]]
+    real_data = np.array(real_data)
+    real_data = np.reshape(real_data, (real_data.shape[0], real_data.shape[1], 1))
+
+    prediction3 = model_rsi.predict(real_data)
+    prediction3 = scaler.inverse_transform(prediction3)
+    print(prediction3)
+
+    # Moving Average
+
+    data_ma=moving_average(data)
+    scaled_data_ma = scaler.fit_transform((data_ma['ma']).values[-22:].reshape(-1, 1))
+    model_ma = load_model(get_path_model("moving_average", predict_type, price))
+
+    x_train = []
+
+    for x in range(len(scaled_data_ma) - 12, len(scaled_data_ma)):
+        x_train.append(scaled_data_ma[x - prediction_days:x, 0])
+
+    x_train = np.array(x_train)
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+
+    real_data = [x_train[len(x_train + 1) - prediction_days:len(x_train), 0]]
+    real_data = np.array(real_data)
+    real_data = np.reshape(real_data, (real_data.shape[0], real_data.shape[1], 1))
+
+    prediction4 = model_ma.predict(real_data)
+    prediction4 = scaler.inverse_transform(prediction4)
+    print(prediction4)
+
+    return get_prediction_table(closing_price=prediction[0][0], price_of_change=prediction2[0][0],rsi=prediction3[0][0], moving_average=prediction4[0][0])
 
 # update graph
 @app.callback(
     Output("candle-graph", "figure"),
     Output("actual-graph", "figure"),
     Output("price-of-change", "figure"),
+    Output("relative-strength-index","figure"),
+    Output("moving-average","figure"),
     Input('my-interval', 'n_intervals'),  # get data with 1 interval
     Input('time-dropdown', 'value'),
     Input('price-dropdown', 'value')
@@ -242,10 +329,17 @@ def update_graphs(_, time, price):
     # get data
     data = get_data(time, price)
 
+    
+    data=relative_strength_index(data)
+    data=moving_average(data)
+    
+
     return [
         get_candle_graph_figure(data),
         get_actual_graph_figure(data),
-        get_price_of_change_graph_figure(data)
+        get_price_of_change_graph_figure(data),
+        get_relative_strength_index_figure(data),
+        get_moving_average_figure(data)
     ]
 
 

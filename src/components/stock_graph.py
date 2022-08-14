@@ -1,7 +1,6 @@
 import plotly.graph_objects as go
 from dash import dcc
 
-
 def get_candle_graph_figure(data):
     fig = go.Figure([go.Candlestick(
         x=data['time'],
@@ -45,6 +44,36 @@ def get_price_of_change_graph_figure(data):
         )
     }
 
+
+def get_relative_strength_index_figure(data):
+    return {
+        "data": [
+            go.Scatter(
+                x=data['time'],
+                y=data["rsi"],
+                mode="lines",
+            )
+        ],
+        "layout": go.Layout(
+            xaxis={'title': 'Timestamp'},
+            yaxis={'title': 'Relative Strength Index'}
+        )
+    }
+
+def get_moving_average_figure(data):
+    return {
+        "data": [
+            go.Scatter(
+                x=data['time'],
+                y=data["ma"],
+                mode="lines",
+            )
+        ],
+        "layout": go.Layout(
+            xaxis={'title': 'Timestamp'},
+            yaxis={'title': 'Moving Average'}
+        )
+    }
 
 def get_actual_graph(df_stock):
     return dcc.Graph(
@@ -95,3 +124,41 @@ def get_price_of_change_graph(df_stock):
             )
         }
     )
+
+def get_relative_strength_index_graph(df_stock):
+    #data=rsi(data)
+    return dcc.Graph(
+        id="relative-strength-index",
+        figure={
+            "data": [
+                go.Scatter(
+                    x=df_stock['time'],
+                    y=df_stock["rsi"],
+                    mode="lines",
+                )
+            ],
+            "layout": go.Layout(
+                xaxis={'title': 'Timestamp'},
+                yaxis={'title': 'Relative Strength Index'}
+            )
+        }
+    )
+
+def get_moving_average_graph(df_stock):
+    #data=moving_average(data)
+    return dcc.Graph(
+            id="moving-average",
+            figure={
+                "data": [
+                    go.Scatter(
+                        x=df_stock['time'],
+                        y=df_stock["ma"],
+                        mode="lines",
+                    )
+                ],
+                "layout": go.Layout(
+                    xaxis={'title': 'Timestamp'},
+                    yaxis={'title': 'Moving Average'}
+                )
+            }
+        )
