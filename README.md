@@ -1,8 +1,5 @@
 # Predict_stock
 
-## Video demo
-Link: https://www.youtube.com/watch?v=vZ74xo8eZ1w
-
 ## Getting started
 Download metatrader 5:
 https://www.metatrader5.com/en/download
